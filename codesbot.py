@@ -20,7 +20,7 @@ HEADERS = {
 	)
 }
 CLEANER = Cleaner(
-	remove_tags=['span', 'img', 'time', 'br', 'font'],
+	remove_tags=['span', 'time', 'br', 'font'],
 	safe_attrs=['href']
 )
 
@@ -50,8 +50,12 @@ def get_page(page_url):
 
 def parse_comment_elements(elements):
 	for e in elements:
-		if e.tag == 'a' and (href := e.attrib.get('href').startswith('/')):
-			e.attrib['href'] = f'{WEBSITE}{href}'
+		if e.tag == 'a':
+			if href := e.attrib.get('href').startswith('/'):
+				e.attrib['href'] = f'{WEBSITE}{href}'
+			for img in e.iterchildren(tag='img'):
+				img.tag = 'b'
+				img.text = '[IMG]'
 		yield html.tostring(e, encoding='unicode', method='html').strip()
 
 

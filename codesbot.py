@@ -5,12 +5,13 @@ from time import sleep
 
 import requests
 from lxml import html
+from lxml.html.clean import Cleaner
 
 
-TELEGRAM = f"https://api.telegram.org/bot{os.getenv('TOKEN')}/sendMessage"
-ME = os.getenv('ME')
-WEBSITE = os.getenv('WEBSITE')
-CODE_PAGE = WEBSITE + os.getenv('PAGE')
+TELEGRAM = f"https://api.telegram.org/bot{os.environ['TOKEN']}/sendMessage"
+ME = os.environ['ME']
+WEBSITE = os.environ['WEBSITE']
+CODE_PAGE = WEBSITE + os.environ['PAGE']
 HEADERS = {
 	'User-Agent': (
 		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -18,7 +19,7 @@ HEADERS = {
 		'Chrome/83.0.4103.116 Safari/537.36'
 	)
 }
-CLEANER = html.clean.Cleaner(
+CLEANER = Cleaner(
 	remove_tags=['span', 'img', 'time', 'br', 'font'],
 	safe_attrs=['href']
 )

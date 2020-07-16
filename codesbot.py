@@ -42,9 +42,13 @@ def get_page(page_url):
 	try:
 		page = requests.get(page_url, headers=HEADERS)
 	except requests.exceptions.RequestException as err:
-		send_message(f'{page.status_code}: {err.args[0]}')
-		sleep(60 * 60 * 3)
-		return get_page()
+		send_message(err.args[0])
+		sleep(60 * 5)
+		return get_page(page_url)
+	if not page.ok:
+		send_message(str(page.status_code))
+		sleep(60 * 60)
+		return get_page(page_url)
 	return page.content.decode('utf-8')
 
 

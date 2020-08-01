@@ -55,7 +55,7 @@ def get_page(page_url):
 def parse_comment_elements(elements):
 	for e in elements:
 		if e.tag == 'a':
-			if href := e.attrib.get('href').startswith('/'):
+			if (href := e.attrib.get('href', "")).startswith('/'):
 				e.attrib['href'] = f'{WEBSITE}{href}'
 			for img in e.iterchildren(tag='img'):
 				img.tag = 'b'
@@ -72,9 +72,9 @@ def parse_comment(comment, comment_id):
 	message = f'{comment_author} ({comment_id}):\n'
 	for paragraph in cleaned_comment.xpath(".//p"):
 		paragraph_text = (
-			paragraph.text.strip() if paragraph.text else ""
+			(paragraph.text.strip() if paragraph.text else "")
 			+ ' '.join(parse_comment_elements(paragraph.getchildren()))
-			+ paragraph.tail.strip() if paragraph.tail else ""
+			+ (paragraph.tail.strip() if paragraph.tail else "")
 		)
 		if paragraph_text:
 			if paragraph.getparent().getparent().tag == 'blockquote':

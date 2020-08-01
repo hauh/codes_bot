@@ -1,4 +1,4 @@
-"""MTG Arena Codes"""
+"""Monitoring some forum thread for some useful info"""
 
 import os
 from time import sleep
@@ -7,6 +7,7 @@ import requests
 from lxml import html
 from lxml.html.clean import Cleaner
 
+##############################
 
 TELEGRAM = f"https://api.telegram.org/bot{os.environ['TOKEN']}/sendMessage"
 ME = os.environ['ME']
@@ -19,10 +20,14 @@ HEADERS = {
 		'Chrome/83.0.4103.116 Safari/537.36'
 	)
 }
+FIVE_MINS = 60 * 5
+ONE_HOUR = 60 * 60
 CLEANER = Cleaner(
 	remove_tags=['span', 'time', 'br', 'font'],
 	safe_attrs=['href']
 )
+
+##############################
 
 
 def send_message(message):
@@ -43,11 +48,11 @@ def get_page(page_url):
 		page = requests.get(page_url, headers=HEADERS)
 	except requests.exceptions.RequestException as err:
 		send_message(err.args[0])
-		sleep(60 * 5)
+		sleep(FIVE_MINS)
 		return get_page(page_url)
 	if not page.ok:
 		send_message(str(page.status_code))
-		sleep(60 * 60)
+		sleep(ONE_HOUR)
 		return get_page(page_url)
 	return page.content.decode('utf-8')
 
@@ -55,8 +60,11 @@ def get_page(page_url):
 def parse_comment_elements(elements):
 	for e in elements:
 		if e.tag == 'a':
+			# replace relative url with absolute
 			if (href := e.get('href', "")).startswith('/'):
 				e.set('href', f'{WEBSITE}/{href}')
+
+			# replace image with placeholder text
 			for img in e.iterchildren(tag='img'):
 				img.tag = 'b'
 				img.text = '[IMG]'
@@ -80,6 +88,7 @@ def parse_comment(comment):
 			+ (paragraph.tail.strip() if paragraph.tail else "")
 		)
 		if paragraph_text:
+			# mark forum quotations as Telegram code blocks
 			if paragraph.getparent().getparent().tag == 'blockquote':
 				paragraph_text = f'<code>{paragraph_text}</code>'
 			message += '\n' + paragraph_text
@@ -87,11 +96,13 @@ def parse_comment(comment):
 
 
 def main():
-	last_comment_id = None
 	page_url = FORUM_PAGE
+	last_comment_id = None
 
 	while True:
 		page = html.fromstring(get_page(page_url))
+
+		# check if it's the last page
 		if last_page_button := page.xpath("//link[@rel='last']"):
 			last_page_url = last_page_button[0].get('href')
 			page = html.fromstring(get_page(last_page_url))
@@ -101,7 +112,7 @@ def main():
 			if not last_comment_id:
 				last_comment_id = int(comments[-1].attrib.get('id').split('_')[-1])
 				send_message(
-					"<b>Restarted. Last message:</b>\n"
+					"<b>Restarted. Last comment:</b>\n"
 					+ parse_comment(comments[-1])
 				)
 			else:
@@ -111,7 +122,7 @@ def main():
 						last_comment_id = comment_id
 						send_message(parse_comment(comment))
 
-		sleep(60 * 5)
+		sleep(FIVE_MINS)
 
 
 if __name__ == "__main__":

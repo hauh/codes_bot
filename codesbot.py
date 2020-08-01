@@ -4,6 +4,7 @@ import os
 from time import sleep
 
 import requests
+from requests.exceptions import RequestException
 from lxml import html
 from lxml.html.clean import Cleaner
 
@@ -21,7 +22,6 @@ HEADERS = {
 	)
 }
 FIVE_MINS = 60 * 5
-ONE_HOUR = 60 * 60
 CLEANER = Cleaner(
 	remove_tags=['span', 'time', 'br', 'font'],
 	safe_attrs=['href']
@@ -30,7 +30,7 @@ CLEANER = Cleaner(
 ##############################
 
 
-def send_message(message):
+def send_message(message, tries=0):
 	data = {
 		'chat_id': ME,
 		'text': message,
@@ -38,23 +38,32 @@ def send_message(message):
 		'disable_web_page_preview': True,
 	}
 	try:
-		requests.post(TELEGRAM, data=data)
-	except Exception as err:  # pylint: disable=broad-except
-		print(err.args)
+		if not (response := requests.post(TELEGRAM, data=data)).ok:
+			raise RequestException(response.json())
+
+	except RequestException as err:
+		if tries < 5:
+			if tries == 2:
+				message = f"Message failed: {err.args}"
+			sleep(FIVE_MINS * tries)
+			send_message(message, tries + 1)
 
 
-def get_page(page_url):
+def get_page(page_url, tries=0):
 	try:
 		page = requests.get(page_url, headers=HEADERS)
-	except requests.exceptions.RequestException as err:
-		send_message(err.args[0])
-		sleep(FIVE_MINS)
-		return get_page(page_url)
-	if not page.ok:
-		send_message(str(page.status_code))
-		sleep(ONE_HOUR)
-		return get_page(page_url)
-	return page.content.decode('utf-8')
+	except RequestException as err:
+		message = f"Network error: {err.args}"
+	else:
+		if page.ok:
+			return page.content.decode('utf-8')
+		message = f"Site is down: {str(page.status_code)}"
+
+	# try until success
+	sleep(FIVE_MINS * tries)
+	if tries > 2:
+		send_message(message)
+	return get_page(page_url, tries + 1)
 
 
 def parse_comment_elements(elements):

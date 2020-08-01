@@ -34,7 +34,7 @@ def send_message(message):
 	}
 	try:
 		requests.post(TELEGRAM, data=data)
-	except Exception as err:
+	except Exception as err:  # pylint: disable=broad-except
 		print(err.args)
 
 
@@ -84,7 +84,7 @@ def parse_comment(comment, comment_id):
 
 
 def main():
-	last_comment_id = 0
+	last_comment_id = None
 	page_url = CODE_PAGE
 
 	while True:
@@ -94,11 +94,18 @@ def main():
 			page = html.fromstring(get_page(last_page_url))
 			page_url = last_page_url
 
-		for comment in page.xpath("//article"):
-			comment_id = int(comment.attrib.get('id').split('_')[-1])
-			if comment_id > last_comment_id:
-				last_comment_id = comment_id
-				send_message(parse_comment(comment, comment_id))
+		if comments := page.xpath("//article"):
+			if not last_comment_id:
+				last_comment_id = int(comments[-1].attrib.get('id').split('_')[-1])
+				send_message(
+					"<b>Restarted. Last message:</b>\n"
+					+ parse_comment(comments[-1], last_comment_id)
+				)
+			for comment in comments:
+				comment_id = int(comment.attrib.get('id').split('_')[-1])
+				if comment_id > last_comment_id:
+					last_comment_id = comment_id
+					send_message(parse_comment(comment, comment_id))
 
 		sleep(60 * 5)
 

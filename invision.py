@@ -1,19 +1,17 @@
-"""Monitoring some forum thread for some useful info"""
+"""Get new posts from Invision-made forum topic."""
 
 import os
-from time import sleep
-
 import requests
-from requests.exceptions import RequestException
 from lxml import html
 from lxml.html.clean import Cleaner
 
 ##############################
 
-TELEGRAM = f"https://api.telegram.org/bot{os.environ['TOKEN']}/sendMessage"
-ME = os.environ['ME']
-WEBSITE = os.environ['WEBSITE']
-FORUM_PAGE = f"{WEBSITE}/forums/topic/{os.environ['THREAD_ID']}"
+WEBSITE = "https://" + os.environ['WEBSITE']
+FORUM_PAGE = (
+	f"{WEBSITE}/index.php?app=forums&controller=topic"
+	f"&id={os.environ['TOPIC_ID']}&page=1000"  # 1000 will redirect to last page
+)
 HEADERS = {
 	'User-Agent': (
 		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -26,44 +24,6 @@ CLEANER = Cleaner(
 	remove_tags=['span', 'time', 'br', 'font'],
 	safe_attrs=['href']
 )
-
-##############################
-
-
-def send_message(message, tries=0):
-	data = {
-		'chat_id': ME,
-		'text': message,
-		'parse_mode': 'html',
-		'disable_web_page_preview': True,
-	}
-	try:
-		if not (response := requests.post(TELEGRAM, data=data)).ok:
-			raise RequestException(response.json())
-
-	except RequestException as err:
-		if tries < 5:
-			if tries == 2:
-				message = f"Message failed: {err.args}"
-			sleep(FIVE_MINS * tries)
-			send_message(message, tries + 1)
-
-
-def get_page(page_url, tries=0):
-	try:
-		page = requests.get(page_url, headers=HEADERS)
-	except RequestException as err:
-		message = f"Network error: {err.args}"
-	else:
-		if page.ok:
-			return page.content.decode('utf-8')
-		message = f"Site is down: {str(page.status_code)}"
-
-	# try until success
-	sleep(FIVE_MINS * tries)
-	if tries > 2:
-		send_message(message)
-	return get_page(page_url, tries + 1)
 
 
 def parse_comment_elements(elements):
@@ -104,35 +64,20 @@ def parse_comment(comment):
 	return message
 
 
-def main():
-	page_url = FORUM_PAGE
-	last_comment_id = None
-
-	while True:
-		page = html.fromstring(get_page(page_url))
-
-		# check if it's the last page
-		if last_page_button := page.xpath("//link[@rel='last']"):
-			last_page_url = last_page_button[0].get('href')
-			page = html.fromstring(get_page(last_page_url))
-			page_url = last_page_url
-
-		if comments := page.xpath("//article"):
-			if not last_comment_id:
-				last_comment_id = int(comments[-1].attrib.get('id').split('_')[-1])
-				send_message(
-					"<b>Restarted. Last comment:</b>\n"
-					+ parse_comment(comments[-1])
-				)
-			else:
-				for comment in comments:
-					comment_id = int(comment.attrib.get('id').split('_')[-1])
-					if comment_id > last_comment_id:
-						last_comment_id = comment_id
-						send_message(parse_comment(comment))
-
-		sleep(FIVE_MINS)
-
-
-if __name__ == "__main__":
-	main()
+def new_posts_checker():
+	response = requests.get(FORUM_PAGE, headers=HEADERS)
+	response.raise_for_status()
+	page = html.fromstring(response.content.decode('utf-8'))
+	comments = page.xpath("//article")
+	last_comment_id = int(comments[-1].attrib.get('id').split('_')[-1])
+	try:
+		if last_comment_id <= new_posts_checker.last_id:
+			return
+	except AttributeError:
+		yield parse_comment(comments[-1])
+	else:
+		for comment in comments:
+			comment_id = int(comment.attrib.get('id').split('_')[-1])
+			if comment_id > last_comment_id:
+				yield parse_comment(comment)
+	new_posts_checker.last_id = last_comment_id

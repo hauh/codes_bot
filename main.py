@@ -19,7 +19,6 @@ FIVE_MINUTES = 60 * 5
 
 def send_message(message, tries=0):
 	try:
-		print(message)
 		response = requests.post(TELEGRAM, json=TG_DATA | {'text': message})
 		response.raise_for_status()
 	except requests.exceptions.RequestException:
@@ -28,6 +27,7 @@ def send_message(message, tries=0):
 
 
 def main():
+	send_message("Restarting...")
 	errors_count = 0
 	while True:
 		for site in (reddit, invision):

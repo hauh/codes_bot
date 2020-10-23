@@ -78,6 +78,6 @@ def new_posts_checker():
 	else:
 		for comment in comments:
 			comment_id = int(comment.attrib.get('id').split('_')[-1])
-			if comment_id > last_comment_id:
+			if comment_id > new_posts_checker.last_id:
 				yield parse_comment(comment)
 	new_posts_checker.last_id = last_comment_id

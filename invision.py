@@ -1,11 +1,10 @@
 """Get new posts from Invision-made forum topic."""
 
 import os
+
 import requests
 from lxml import html
 from lxml.html.clean import Cleaner
-
-##############################
 
 WEBSITE = "https://" + os.environ['WEBSITE']
 FORUM_PAGE = (
@@ -40,28 +39,47 @@ def parse_comment_elements(elements):
 		yield html.tostring(e, encoding='unicode').strip()
 
 
-def parse_comment(comment):
-	comment_url_tag = comment.xpath(".//div[@class='ipsType_reset']/a")[0]
-	comment_url = comment_url_tag.get('href')
-	comment_time = next(comment_url_tag.iterchildren()).get('title').strip()
-	cleaned_comment = CLEANER.clean_html(comment)
-	comment_author = html.tostring(
-		cleaned_comment.xpath(".//aside/div/h3/strong")[0],
-		encoding='unicode', with_tail=False
+def parse_paragraph(paragraph):
+	paragraph_text = (
+		(paragraph.text.strip() if paragraph.text else "")
+		+ ' '.join(parse_comment_elements(paragraph.getchildren()))
+		+ (paragraph.tail.strip() if paragraph.tail else "")
 	)
-	message = f'{comment_author} (<a href="{comment_url}">{comment_time}</a>):\n'
-	for paragraph in cleaned_comment.xpath(".//p"):
-		paragraph_text = (
-			(paragraph.text.strip() if paragraph.text else "")
-			+ ' '.join(parse_comment_elements(paragraph.getchildren()))
-			+ (paragraph.tail.strip() if paragraph.tail else "")
-		)
-		if paragraph_text:
-			# mark forum quotations as Telegram code blocks
-			if paragraph.getparent().getparent().tag == 'blockquote':
-				paragraph_text = f'<code>{paragraph_text}</code>'
-			message += '\n' + paragraph_text
-	return message
+	if paragraph_text:
+		# mark forum quotations as Telegram code blocks
+		grandparent = paragraph.getparent().getparent()
+		if grandparent is not None and grandparent.tag == 'blockquote':
+			paragraph_text = f'<code>{paragraph_text}</code>'
+	return paragraph_text
+
+
+def parse_table(table):
+	lines = []
+	table = table.find('tbody')
+	for tr in table.iterchildren('tr'):
+		cells = []
+		for td in tr.iterchildren('td'):
+			if cell_text := td.text.strip():
+				cells.append(cell_text)
+		lines.append('\t'.join(cells))
+	return '<code>' + '\n'.join(lines) + '</code>'
+
+
+def parse_comment(comment):
+	author = comment.xpath(".//aside/div/h3/strong/a")[0].text
+	url = f"{FORUM_PAGE}#{comment.getprevious().get('id')}"
+	time = comment.xpath(".//time")[0].get('title')
+	content = comment.xpath(".//div[@data-role='commentContent']")[0]
+	cleaned_comment = CLEANER.clean_html(content)
+	message_parts = [f'{author} (<a href="{url}">{time}</a>):\n']
+	for comment_part in cleaned_comment.iterdescendants('p', 'table'):
+		if comment_part.tag == 'p':
+			parsed_part = parse_paragraph(comment_part)
+		else:
+			parsed_part = parse_table(comment_part)
+		if parsed_part:
+			message_parts.append(parsed_part)
+	return '\n'.join(message_parts)
 
 
 def new_posts_checker():
